@@ -22,14 +22,16 @@ def run_bot():
         from bot.bot import LibraryBot
         bot = LibraryBot()
         logger.info("Бот запускается...")
-        bot.run()  # синхронный метод, внутри asyncio.run()
+        
+        # Создаём новый цикл событий и устанавливаем его для этого потока
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        # Запускаем бота (он будет использовать этот цикл)
+        bot.run()
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
 
 if __name__ == "__main__":
-    # Устанавливаем политику для корректной работы asyncio
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    
     bot_thread = Thread(target=run_bot, daemon=True)
     bot_thread.start()
     logger.info("Поток бота запущен")
