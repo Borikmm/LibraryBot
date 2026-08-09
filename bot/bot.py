@@ -30,9 +30,8 @@ class LibraryBot:
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text))
 
     def run(self):
-        """Запуск бота с polling"""
-        # Запускаем планировщик
+        """Запуск бота с polling в текущем цикле событий"""
         self.scheduler.start()
         logger.info("Планировщик запущен")
-        # Запускаем бота (этот метод блокирует выполнение до остановки)
+        # run_polling() использует текущий цикл событий (установленный в потоке)
         self.app.run_polling()
