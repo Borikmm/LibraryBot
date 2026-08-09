@@ -8,9 +8,9 @@ from .stats_service import StatsService
 from .scheduler import Scheduler
 from .handlers import Handlers
 import logging
-import asyncio
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class LibraryBot:
     def __init__(self):
@@ -29,14 +29,10 @@ class LibraryBot:
         self.app.add_handler(CallbackQueryHandler(self.handlers.button_callback))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text))
 
-    async def run_async(self):
-        """Асинхронный запуск бота"""
-        self.scheduler.start()
-        await self.app.initialize()
-        await self.app.start()
-        await self.app.updater.start_polling()
-        await self.app.updater.idle()
-
     def run(self):
-        """Синхронный запуск (для локального тестирования)"""
-        asyncio.run(self.run_async())
+        """Запуск бота с polling"""
+        # Запускаем планировщик
+        self.scheduler.start()
+        logger.info("Планировщик запущен")
+        # Запускаем бота (этот метод блокирует выполнение до остановки)
+        self.app.run_polling()
