@@ -18,22 +18,18 @@ def health():
     return "OK", 200
 
 def run_bot():
-    """Запуск бота в отдельном потоке с собственным циклом событий"""
     try:
         from bot.bot import LibraryBot
         bot = LibraryBot()
         logger.info("Бот запускается...")
-        
-        # Создаём новый цикл событий и устанавливаем его для этого потока
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Запускаем бота — теперь цикл существует, и run_polling сможет его использовать
-        bot.run()
+        bot.run()  # синхронный метод, внутри asyncio.run()
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
 
 if __name__ == "__main__":
+    # Устанавливаем политику для корректной работы asyncio
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+    
     bot_thread = Thread(target=run_bot, daemon=True)
     bot_thread.start()
     logger.info("Поток бота запущен")
