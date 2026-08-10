@@ -146,4 +146,3 @@ class LibraryBot:
         self.app.run_polling(
             allowed_updates=Update.ALL_TYPES,
         )
-```
