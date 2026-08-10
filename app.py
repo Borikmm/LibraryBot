@@ -1,34 +1,67 @@
-from flask import Flask
-from threading import Thread
 import os
+import threading
 import logging
+
+from flask import Flask
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask('')
+app = Flask(__name__)
 
-@app.route('/')
+
+@app.route("/")
 def home():
-    return "🤖 Bot is running!"
+    return "🤖 LibraryBot is running!", 200
 
-@app.route('/health')
+
+@app.route("/health")
 def health():
     return "OK", 200
 
-def run_bot():
-    """Запуск бота в отдельном потоке"""
-    try:
-        from bot.bot import LibraryBot
-        bot = LibraryBot()
-        logger.info("Бот запускается...")
-        bot.run()
-    except Exception as e:
-        logger.error(f"Ошибка при запуске бота: {e}")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", "10000"))
+
+    logger.info(
+        "Запускаем Flask на порту %s",
+        port,
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        use_reloader=False,
+    )
+
+
+def main():
+    # Flask работает в отдельном потоке.
+    # Telegram bot остаётся в главном потоке,
+    # где python-telegram-bot сможет нормально
+    # работать с asyncio event loop.
+    web_thread = threading.Thread(
+        target=run_web_server,
+        daemon=True,
+        name="flask-server",
+    )
+
+    web_thread.start()
+
+    logger.info("Flask health server запущен")
+
+    from bot.bot import LibraryBot
+
+    bot = LibraryBot()
+
+    logger.info("Бот запускается...")
+
+    # ВАЖНО:
+    # Telegram bot запускается в ГЛАВНОМ потоке.
+    bot.run()
+
 
 if __name__ == "__main__":
-    bot_thread = Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    logger.info("Поток бота запущен")
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    main()
