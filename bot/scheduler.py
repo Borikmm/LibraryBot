@@ -20,9 +20,7 @@ class Scheduler:
         self.bot_app = bot_app
         self.quote_service = quote_service
 
-        self.scheduler = AsyncIOScheduler(
-            timezone=config.TIMEZONE
-        )
+        self.scheduler = AsyncIOScheduler(timezone="UTC")
 
     def start(self):
         times = [
