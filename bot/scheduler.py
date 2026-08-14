@@ -37,7 +37,7 @@ class Scheduler:
                 trigger=CronTrigger(
                     hour=hour,
                     minute=minute,
-                    timezone=config.TIMEZONE,
+                    timezone="UTC",
                 ),
                 args=[time_str],
                 id=f"quote_{time_str.replace(':', '_')}",
@@ -49,7 +49,7 @@ class Scheduler:
         logger.info(
             "Планировщик запущен. Часовой пояс: %s. "
             "Время цитат: %s",
-            config.TIMEZONE,
+            "UTC",
             ", ".join(times),
         )
 
