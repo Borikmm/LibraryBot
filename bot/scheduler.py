@@ -6,6 +6,13 @@ import logging
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Настройка вывода в консоль
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 class Scheduler:
@@ -69,6 +76,7 @@ class Scheduler:
                 "GROUP_CHAT_ID не задан. "
                 "Сначала бот должен получить /start в группе."
             )
+            print("aaaaa------")
             return
 
         try:
@@ -76,6 +84,7 @@ class Scheduler:
 
             if not quote:
                 logger.error("Не удалось получить случайную цитату.")
+                print("aaaaa------2")
                 return
 
             text = f"🕒 {time_str}\n\n«{quote}»"
@@ -96,3 +105,4 @@ class Scheduler:
                 "Ошибка при отправке цитаты в chat_id=%s",
                 chat_id,
             )
+            print("aaaaa------3")
