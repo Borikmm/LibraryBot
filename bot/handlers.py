@@ -109,38 +109,6 @@ class Handlers:
             sent = await query.message.reply_text("Вернуться к главному меню: /start")
             asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 120))
 
-        elif query.data == "mark_read":
-            book = self.book_svc.get_current()
-            if not book:
-                await query.edit_message_text("Книга не выбрана. Обратитесь к администратору.")
-                return
-
-            today = datetime.now().date().isoformat()
-            if book.get("last_update") != today:
-                # Только первый читатель за день двигает общую книгу
-                updated = self.book_svc.update_progress(user_id)
-            
-                if not updated:
-                    text = "⏳ Не удалось обновить прогресс книги."
-                else:
-                    # И первый пользователь тоже получает свою личную отметку
-                    self.user_svc.mark_read(user_id)
-                    progress = self.book_svc.get_progress_percent()
-                    text = f"✅ Отметка принята! Текущий прогресс: {progress}%"
-            else:
-                # Книга уже продвинута сегодня.
-                # Но конкретного пользователя всё равно отмечаем.
-                self.user_svc.mark_read(user_id)
-                progress = self.book_svc.get_progress_percent()
-                text = (
-                    f"✅ Вы отметили прочтение за сегодня!\n"
-                    f"Прогресс книги не изменился и составляет {progress}%."
-                )
-
-            await query.edit_message_text(text, reply_markup=None)
-            sent = await query.message.reply_text("Вернуться к главному меню: /start")
-            asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 5))
-
         elif query.data == "change_book":
             if not self.user_svc.is_admin(user_id):
                 await query.edit_message_text("У вас нет прав для смены книги.")
