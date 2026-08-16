@@ -141,18 +141,27 @@ class Handlers:
                 return
 
             today = datetime.now().date().isoformat()
-            if book.get("last_update") == today:
-                reply = await update.message.reply_text("⏳ Вы уже отмечали сегодня! Прогресс не изменился.")
-                asyncio.create_task(self._delete_bot_msg(context, reply.chat_id, reply.message_id, 5))
-                return
 
-            updated = self.book_svc.update_progress(user_id)
-            if updated:
+            if book.get("last_update") != today:
+                # Только первый читатель за день двигает общую книгу
+                updated = self.book_svc.update_progress(user_id)
+
+                if not updated:
+                    text_msg = "⏳ Не удалось обновить прогресс книги."
+                else:
+                    # И первый пользователь тоже получает свою личную отметку
+                    self.user_svc.mark_read(user_id)
+                    progress = self.book_svc.get_progress_percent()
+                    text_msg = f"✅ Отметка принята! Текущий прогресс: {progress}%"
+            else:
+                # Книга уже продвинута сегодня.
+                # Но конкретного пользователя всё равно отмечаем.
                 self.user_svc.mark_read(user_id)
                 progress = self.book_svc.get_progress_percent()
-                text_msg = f"✅ Отметка принята! Текущий прогресс: {progress}%"
-            else:
-                text_msg = "⏳ Не удалось отметить. Попробуйте позже."
+                text_msg = (
+                    f"✅ Вы отметили прочтение за сегодня!\n"
+                    f"Прогресс книги не изменился и составляет {progress}%."
+                )
 
             reply = await update.message.reply_text(text_msg)
             asyncio.create_task(self._delete_bot_msg(context, reply.chat_id, reply.message_id, 10))
