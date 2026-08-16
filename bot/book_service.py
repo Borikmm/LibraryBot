@@ -31,6 +31,37 @@ class BookService:
         }
         self.save_current()
 
+    def update_book(self, title: str, author: str, total_pages: int, norm_pages: int,
+                    start_date: str, current_page: int = 0, last_update: Optional[str] = None):
+        """Update the current book without resetting its reading progress."""
+        if not self.book:
+            return False
+        try:
+            start = date.fromisoformat(start_date)
+        except ValueError:
+            raise ValueError("Некорректная дата начала")
+        if total_pages <= 0 or norm_pages <= 0:
+            raise ValueError("Количество страниц и норма должны быть больше нуля")
+        if current_page < 0 or current_page > total_pages:
+            raise ValueError("Текущая страница должна быть от 0 до общего количества страниц")
+        if last_update is not None:
+            try:
+                date.fromisoformat(last_update)
+            except ValueError:
+                raise ValueError("Некорректная дата последней отметки")
+
+        self.book.update({
+            "title": title,
+            "author": author,
+            "total_pages": total_pages,
+            "norm_pages": norm_pages,
+            "current_page": current_page,
+            "start_date": start.isoformat(),
+            "last_update": last_update,
+        })
+        self.save_current()
+        return True
+
     def update_progress(self, user_id: int) -> bool:
         if not self.book:
             return False
