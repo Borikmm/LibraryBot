@@ -1,11 +1,13 @@
 import os
 import threading
-import logging
 
 from flask import Flask
 
+from bot.logging_config import configure_logging
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
+
+import logging
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -24,10 +26,7 @@ def health():
 def run_web_server():
     port = int(os.environ.get("PORT", "10000"))
 
-    logger.info(
-        "Запускаем Flask на порту %s",
-        port,
-    )
+    logger.info("Запускаем Flask на порту %s", port)
 
     app.run(
         host="0.0.0.0",
@@ -38,28 +37,18 @@ def run_web_server():
 
 
 def main():
-    # Flask работает в отдельном потоке.
-    # Telegram bot остаётся в главном потоке,
-    # где python-telegram-bot сможет нормально
-    # работать с asyncio event loop.
     web_thread = threading.Thread(
         target=run_web_server,
         daemon=True,
         name="flask-server",
     )
-
     web_thread.start()
-
     logger.info("Flask health server запущен")
 
     from bot.bot import LibraryBot
 
     bot = LibraryBot()
-
     logger.info("Бот запускается...")
-
-    # ВАЖНО:
-    # Telegram bot запускается в ГЛАВНОМ потоке.
     bot.run()
 
 
