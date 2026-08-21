@@ -8,11 +8,16 @@ GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", 0))
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-QUOTES_FILE = os.path.join(DATA_DIR, "quotes.txt")
+QUOTES_FILE = os.path.join(BASE_DIR, "scripts", "data", "quotes.txt")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 CURRENT_BOOK_FILE = os.path.join(DATA_DIR, "current_book.json")
 HISTORY_FILE = os.path.join(DATA_DIR, "books_history.json")
 
+# Часовой пояс для всех задач планировщика.
+# На Render можно переопределить через переменную окружения BOT_TIMEZONE.
+TIMEZONE = os.getenv("BOT_TIMEZONE", "Europe/Amsterdam")
+
 MORNING_TIME = "06:00"
 AFTERNOON_TIME = "13:00"
 EVENING_TIME = "21:00"
+REMINDER_TIME = "22:00"

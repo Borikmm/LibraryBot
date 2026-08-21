@@ -42,7 +42,12 @@ class LibraryBot:
         self.quote_svc = QuoteService()
         self.stats_svc = StatsService(self.book_svc, self.user_svc)
         self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc)
-        self.scheduler = Scheduler(self.app, self.quote_svc)
+        self.scheduler = Scheduler(
+            self.app,
+            self.quote_svc,
+            self.user_svc,
+            self.book_svc,
+        )
         self._register_handlers()
 
     async def _post_init(self, application):
@@ -56,8 +61,6 @@ class LibraryBot:
     def _register_handlers(self):
         self.app.add_handler(CommandHandler("start", self.handlers.start_command))
 
-        # ConversationHandler должен стоять раньше общего CallbackQueryHandler,
-        # чтобы callback-кнопки change_book/edit_book могли запустить диалог.
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler("change_book", self.handlers.change_book_start),
@@ -82,13 +85,8 @@ class LibraryBot:
             allow_reentry=True,
         )
         self.app.add_handler(conv_handler)
-
-        # Остальные callback-кнопки (в частности статистика).
         self.app.add_handler(CallbackQueryHandler(self.handlers.button_callback))
-
-        self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text)
-        )
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text))
 
     def run(self):
         logger.info("Бот запускается...")

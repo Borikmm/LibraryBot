@@ -1,9 +1,9 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ContextTypes, ConversationHandler
 from .user_service import UserService
 from .book_service import BookService
 from .stats_service import StatsService
-from .config import GROUP_CHAT_ID
+from . import config
 import logging
 import asyncio
 from datetime import datetime, date
@@ -35,6 +35,7 @@ class Handlers:
                 buttons.append([InlineKeyboardButton("✏️ Отредактировать текущую книгу", callback_data="edit_book")])
             else:
                 buttons.append([InlineKeyboardButton("📚 Установить книгу", callback_data="change_book")])
+            buttons.append([InlineKeyboardButton("📦 Отправить данные", callback_data="export_data")])
         return InlineKeyboardMarkup(buttons)
 
     def _get_users_status(self) -> str:
@@ -59,8 +60,9 @@ class Handlers:
         username = user.username or user.first_name
         self.user_svc.add_user(user.id, username=username, role="reader")
         if update.effective_chat.type in ["group", "supergroup"]:
-            global GROUP_CHAT_ID
-            GROUP_CHAT_ID = update.effective_chat.id
+            # Важно: меняем значение в модуле config, а не локальную копию,
+            # которую планировщик мог импортировать раньше.
+            config.GROUP_CHAT_ID = update.effective_chat.id
 
         book = self.book_svc.get_current()
         users_status = self._get_users_status()
@@ -116,19 +118,54 @@ class Handlers:
             )
             return EDIT_TITLE
 
+        if query.data == "export_data":
+            if not self.user_svc.is_admin(user_id):
+                await query.edit_message_text("У вас нет прав для выгрузки данных.")
+                return
+
+            await self._send_data_files_to_admin(update, context)
+            return
+
         return ConversationHandler.END
 
+    async def _send_data_files_to_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Отправляет три JSON-файла администратору в личные сообщения."""
+        user_id = update.effective_user.id
+        files = [
+            (config.CURRENT_BOOK_FILE, "current_book.json"),
+            (config.HISTORY_FILE, "books_history.json"),
+            (config.USERS_FILE, "users.json"),
+        ]
+
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="📦 Выгрузка данных LibraryBot: текущая книга, история книг и пользователи.",
+            )
+            for path, filename in files:
+                with open(path, "rb") as file:
+                    await context.bot.send_document(
+                        chat_id=user_id,
+                        document=InputFile(file, filename=filename),
+                    )
+            await update.callback_query.edit_message_text(
+                "✅ Три файла отправлены вам в личные сообщения."
+            )
+        except Exception as exc:
+            logger.exception("Не удалось отправить файлы администратору %s", user_id)
+            await update.callback_query.edit_message_text(
+                "❌ Не удалось отправить файлы в личные сообщения. "
+                "Откройте личный чат с ботом и отправьте /start, затем попробуйте снова."
+            )
+            logger.info("Причина ошибки отправки файлов: %s", exc)
+
     async def change_book_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик нажатия на кнопку 'Поменять книгу' (запускает диалог)"""
         query = update.callback_query
         await query.answer()
         user_id = query.from_user.id
-
         if not self.user_svc.is_admin(user_id):
             await query.edit_message_text("У вас нет прав для смены книги.")
             return ConversationHandler.END
-
-        # Редактируем текущее сообщение с кнопкой, заменяя его на приглашение ввести название
         await query.edit_message_text("Введите название книги:")
         return TITLE
 
@@ -215,7 +252,6 @@ class Handlers:
 
     # ----- Редактирование текущей книги -----
     async def edit_book_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        print("efefefefef")
         context.user_data['edit_book_data']['title'] = update.message.text.strip()
         await update.message.reply_text("Введите нового автора книги:")
         return EDIT_AUTHOR
