@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -15,7 +16,7 @@ HISTORY_FILE = os.path.join(DATA_DIR, "books_history.json")
 
 # Часовой пояс для всех задач планировщика.
 # На Render можно переопределить через переменную окружения BOT_TIMEZONE.
-TIMEZONE = os.getenv("BOT_TIMEZONE", "Europe/Amsterdam")
+TIMEZONE = os.getenv("BOT_TIMEZONE", "Asia/Chita")
 
 MORNING_TIME = "06:00"
 AFTERNOON_TIME = "13:00"
