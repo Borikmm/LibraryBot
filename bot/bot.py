@@ -56,15 +56,20 @@ class LibraryBot:
     def _register_handlers(self):
         self.app.add_handler(CommandHandler("start", self.handlers.start_command))
 
-        # ConversationHandler должен стоять раньше общего CallbackQueryHandler,
-        # чтобы callback-кнопки change_book/edit_book могли запустить диалог.
+        # Callback-кнопки, запускающие диалог, должны быть entry_points
+        # самого ConversationHandler. Это гарантирует, что после нажатия
+        # сразу устанавливается нужное состояние диалога.
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler("change_book", self.handlers.change_book_start),
                 CallbackQueryHandler(
-                    self.handlers.button_callback,
-                    pattern="^(change_book|edit_book)$",
-                )
+                    self.handlers.change_book_callback,
+                    pattern="^change_book$",
+                ),
+                CallbackQueryHandler(
+                    self.handlers.edit_book_callback,
+                    pattern="^edit_book$",
+                ),
             ],
             states={
                 TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_title)],
@@ -83,8 +88,13 @@ class LibraryBot:
         )
         self.app.add_handler(conv_handler)
 
-        # Остальные callback-кнопки (в частности статистика).
-        self.app.add_handler(CallbackQueryHandler(self.handlers.button_callback))
+        # Только остальные callback-кнопки (например, статистика).
+        self.app.add_handler(
+            CallbackQueryHandler(
+                self.handlers.button_callback,
+                pattern="^stats$",
+            )
+        )
 
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text)
