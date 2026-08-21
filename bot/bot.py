@@ -33,8 +33,8 @@ class LibraryBot:
         self.app = (
             Application.builder()
             .token(TOKEN)
-            # .post_init(self._post_init)
-            # .post_shutdown(self._post_shutdown)
+            .post_init(self._post_init)
+            .post_shutdown(self._post_shutdown)
             .build()
         )
         self.user_svc = UserService()
