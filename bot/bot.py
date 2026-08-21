@@ -64,8 +64,7 @@ class LibraryBot:
                 CallbackQueryHandler(
                     self.handlers.button_callback,
                     pattern="^(change_book|edit_book)$",
-                ),
-                CallbackQueryHandler(self.handlers.change_book_callback, pattern="^change_book$")
+                )
             ],
             states={
                 TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_title)],
