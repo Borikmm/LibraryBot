@@ -93,8 +93,8 @@ class LibraryBot:
             entry_points=[
                 CommandHandler(
                     "change_book",
-                    self.handlers.change_book_start,
-                )
+                    self.handlers.change_book_start,),
+                CallbackQueryHandler(self.handlers.change_book_callback, pattern="^change_book$")
             ],
             states={
                 TITLE: [

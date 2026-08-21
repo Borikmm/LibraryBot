@@ -109,19 +109,40 @@ class Handlers:
             sent = await query.message.reply_text("Вернуться к главному меню: /start")
             asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 120))
 
-        elif query.data == "change_book":
-            if not self.user_svc.is_admin(user_id):
-                await query.edit_message_text("У вас нет прав для смены книги.")
-                return
-            
-            # Запускаем диалог смены книги через команду
-            await query.edit_message_text("Введите название книги:")
-            # Устанавливаем состояние для ConversationHandler
-            context.user_data['in_change_book'] = True
-            # Сохраняем chat_id и message_id для ответа
-            context.user_data['change_book_chat_id'] = query.message.chat_id
-            context.user_data['change_book_message_id'] = query.message.message_id
+
+    async def change_book_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик нажатия на кнопку 'Поменять книгу' (запускает диалог)"""
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+
+        if not self.user_svc.is_admin(user_id):
+            await query.edit_message_text("У вас нет прав для смены книги.")
             return ConversationHandler.END
+
+        # Редактируем текущее сообщение с кнопкой, заменяя его на приглашение ввести название
+        await query.edit_message_text("Введите название книги:")
+        return TITLE
+
+    # ----- Диалог смены книги при вызове команды (ConversationHandler) -----
+    async def change_book_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if not self.user_svc.is_admin(user_id):
+            await update.message.reply_text("У вас нет прав для смены книги.")
+            return ConversationHandler.END
+
+        # Если диалог начат с кнопки, используем сохранённые данные
+        if context.user_data.get('in_change_book'):
+            # Удаляем сообщение с кнопкой (оно уже отредактировано)
+            context.user_data['in_change_book'] = False
+            # Продолжаем диалог
+            await update.message.reply_text("Введите название книги:")
+            return TITLE
+
+        await update.message.reply_text("Введите название книги:")
+        return TITLE
+
+
 
     # ----- Обработка текстовых сообщений (отметка) -----
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,27 +162,18 @@ class Handlers:
                 return
 
             today = datetime.now().date().isoformat()
+            if book.get("last_update") == today:
+                reply = await update.message.reply_text("⏳ Вы уже отмечали сегодня! Прогресс не изменился.")
+                asyncio.create_task(self._delete_bot_msg(context, reply.chat_id, reply.message_id, 5))
+                return
 
-            if book.get("last_update") != today:
-                # Только первый читатель за день двигает общую книгу
-                updated = self.book_svc.update_progress(user_id)
-
-                if not updated:
-                    text_msg = "⏳ Не удалось обновить прогресс книги."
-                else:
-                    # И первый пользователь тоже получает свою личную отметку
-                    self.user_svc.mark_read(user_id)
-                    progress = self.book_svc.get_progress_percent()
-                    text_msg = f"✅ Отметка принята! Текущий прогресс: {progress}%"
-            else:
-                # Книга уже продвинута сегодня.
-                # Но конкретного пользователя всё равно отмечаем.
+            updated = self.book_svc.update_progress(user_id)
+            if updated:
                 self.user_svc.mark_read(user_id)
                 progress = self.book_svc.get_progress_percent()
-                text_msg = (
-                    f"✅ Вы отметили прочтение за сегодня!\n"
-                    f"Прогресс книги не изменился и составляет {progress}%."
-                )
+                text_msg = f"✅ Отметка принята! Текущий прогресс: {progress}%"
+            else:
+                text_msg = "⏳ Не удалось отметить. Попробуйте позже."
 
             reply = await update.message.reply_text(text_msg)
             asyncio.create_task(self._delete_bot_msg(context, reply.chat_id, reply.message_id, 10))
