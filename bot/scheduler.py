@@ -1,5 +1,6 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from datetime import date
 
 from . import config
 import logging
@@ -8,10 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 class Scheduler:
-    def __init__(self, bot_app, quote_service, user_service):
+    def __init__(self, bot_app, quote_service, user_service, book_service):
         self.bot_app = bot_app
         self.quote_service = quote_service
         self.user_service = user_service
+        self.book_service = book_service
         self.scheduler = AsyncIOScheduler(timezone=config.TIMEZONE)
 
     def start(self):
@@ -89,18 +91,13 @@ class Scheduler:
             logger.error("GROUP_CHAT_ID не задан — вечернее напоминание не отправлено.")
             return
 
-        book = self.user_service.book_svc.get_current() if hasattr(self.user_service, "book_svc") else None
-        # UserService intentionally does not depend on BookService, so checking
-        # only today's mark is enough here. If there is no current book, there is
-        # nothing to remind users about.
-        if not book:
+        if not self.book_service.get_current():
             logger.info("Текущей книги нет — вечерние напоминания не отправляются.")
             return
 
-        today = __import__("datetime").date.today().isoformat()
-        users = self.user_service.get_all_users()
+        today = date.today().isoformat()
         overdue = []
-        for uid, data in users.items():
+        for uid, data in self.user_service.get_all_users().items():
             if data.get("last_mark_date") != today:
                 username = data.get("username") or uid
                 overdue.append(str(username))
@@ -114,10 +111,16 @@ class Scheduler:
             "",
             "Следующие пользователи ещё не отметили прочтение книги сегодня:",
         ]
-        lines.extend(f"• {name} — вы не прочитали книгу. Пожалуйста, прочитайте её и отметьтесь!" for name in overdue)
+        lines.extend(
+            f"• {name} — вы не прочитали книгу. Пожалуйста, прочитайте её и отметьтесь!"
+            for name in overdue
+        )
 
         try:
-            sent = await self.bot_app.bot.send_message(chat_id=chat_id, text="\n".join(lines))
+            sent = await self.bot_app.bot.send_message(
+                chat_id=chat_id,
+                text="\n".join(lines),
+            )
             logger.info(
                 "Вечернее напоминание отправлено: пользователей=%s, message_id=%s",
                 len(overdue),
