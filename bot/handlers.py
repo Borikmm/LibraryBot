@@ -82,6 +82,7 @@ class Handlers:
         asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 120))
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обрабатывает обычные callback-кнопки, не запускающие ConversationHandler."""
         query = update.callback_query
         await query.answer()
         user_id = query.from_user.id
@@ -91,12 +92,9 @@ class Handlers:
             await query.edit_message_text(stats_text, reply_markup=None)
             sent = await query.message.reply_text("Вернуться к главному меню: /start")
             asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 120))
-            return
-
-        return ConversationHandler.END
 
     async def change_book_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик нажатия на кнопку 'Поменять книгу' (запускает диалог)"""
+        """Entry point ConversationHandler для кнопки «Поменять книгу»."""
         query = update.callback_query
         await query.answer()
         user_id = query.from_user.id
@@ -105,9 +103,38 @@ class Handlers:
             await query.edit_message_text("У вас нет прав для смены книги.")
             return ConversationHandler.END
 
-        # Редактируем текущее сообщение с кнопкой, заменяя его на приглашение ввести название
+        context.user_data.pop('edit_book', None)
+        context.user_data.pop('edit_book_data', None)
+        context.user_data.pop('title', None)
+        context.user_data.pop('author', None)
+        context.user_data.pop('total', None)
         await query.edit_message_text("Введите название книги:")
         return TITLE
+
+    async def edit_book_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Entry point ConversationHandler для кнопки «Отредактировать текущую книгу»."""
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+
+        if not self.user_svc.is_admin(user_id):
+            await query.edit_message_text("У вас нет прав для редактирования книги.")
+            return ConversationHandler.END
+
+        book = self.book_svc.get_current()
+        if not book:
+            await query.edit_message_text("Текущая книга не выбрана. Используйте «Поменять книгу».")
+            return ConversationHandler.END
+
+        # Копируем данные, чтобы не менять книгу до последнего шага диалога.
+        context.user_data['edit_book'] = True
+        context.user_data['edit_book_data'] = dict(book)
+        await query.edit_message_text(
+            f"Редактирование текущей книги.\n\n"
+            f"Название сейчас: {book.get('title')}\n"
+            "Введите новое название книги:"
+        )
+        return EDIT_TITLE
 
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id == context.bot.id:
@@ -139,7 +166,6 @@ class Handlers:
             asyncio.create_task(self._delete_bot_msg(context, reply.chat_id, reply.message_id, 10))
             await self.start_command(update, context)
 
-    # ----- Создание новой книги -----
     async def change_book_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if not self.user_svc.is_admin(user_id):
@@ -190,7 +216,6 @@ class Handlers:
             await update.message.reply_text("Пожалуйста, введите положительное число, не превышающее общее количество страниц.")
             return NORM
 
-    # ----- Редактирование текущей книги -----
     async def edit_book_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['edit_book_data']['title'] = update.message.text.strip()
         await update.message.reply_text("Введите нового автора книги:")
