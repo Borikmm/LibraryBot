@@ -4,103 +4,124 @@ from apscheduler.triggers.cron import CronTrigger
 from . import config
 import logging
 
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-# Настройка вывода в консоль
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
 
 
 class Scheduler:
-    def __init__(self, bot_app, quote_service):
+    def __init__(self, bot_app, quote_service, user_service):
         self.bot_app = bot_app
         self.quote_service = quote_service
-
-        self.scheduler = AsyncIOScheduler(timezone="UTC")
+        self.user_service = user_service
+        self.scheduler = AsyncIOScheduler(timezone=config.TIMEZONE)
 
     def start(self):
-        times = [
-            config.MORNING_TIME,
-            config.AFTERNOON_TIME,
-            config.EVENING_TIME,
+        scheduled_times = [
+            ("morning", config.MORNING_TIME, self._send_quote),
+            ("afternoon", config.AFTERNOON_TIME, self._send_quote),
+            ("evening", config.EVENING_TIME, self._send_quote),
+            ("reminder", config.REMINDER_TIME, self._send_reading_reminders),
         ]
 
-        for time_str in times:
+        for job_name, time_str, callback in scheduled_times:
             hour, minute = map(int, time_str.split(":"))
-
             self.scheduler.add_job(
-                self._send_quote,
+                callback,
                 trigger=CronTrigger(
                     hour=hour,
                     minute=minute,
-                    timezone="UTC",
+                    timezone=config.TIMEZONE,
                 ),
-                args=[time_str],
-                id=f"quote_{time_str.replace(':', '_')}",
+                args=[time_str] if callback == self._send_quote else [],
+                id=f"{job_name}_{time_str.replace(':', '_')}",
                 replace_existing=True,
+                misfire_grace_time=300,
             )
 
         self.scheduler.start()
 
         logger.info(
             "Планировщик запущен. Часовой пояс: %s. "
-            "Время цитат: %s",
-            "UTC",
-            ", ".join(times),
+            "Цитаты: %s, %s, %s. Напоминания: %s",
+            config.TIMEZONE,
+            config.MORNING_TIME,
+            config.AFTERNOON_TIME,
+            config.EVENING_TIME,
+            config.REMINDER_TIME,
         )
 
         for job in self.scheduler.get_jobs():
-            logger.info(
-                "Запланирована задача %s, следующий запуск: %s",
-                job.id,
-                job.next_run_time,
-            )
+            logger.info("Задача %s, следующий запуск: %s", job.id, job.next_run_time)
 
     def stop(self):
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
 
     async def _send_quote(self, time_str: str):
-        # Берём актуальный GROUP_CHAT_ID из config,
-        # а не устаревшую копию, импортированную при запуске.
         chat_id = config.GROUP_CHAT_ID
-
         if not chat_id:
             logger.error(
-                "GROUP_CHAT_ID не задан. "
-                "Сначала бот должен получить /start в группе."
+                "GROUP_CHAT_ID не задан. Укажите ID группы в переменной окружения "
+                "GROUP_CHAT_ID на Render или вызовите /start в группе после запуска."
             )
-            print("aaaaa------")
             return
 
         try:
             quote = self.quote_service.get_random()
-
             if not quote:
                 logger.error("Не удалось получить случайную цитату.")
-                print("aaaaa------2")
                 return
-
-            text = f"🕒 {time_str}\n\n«{quote}»"
 
             sent = await self.bot_app.bot.send_message(
                 chat_id=chat_id,
-                text=text,
+                text=f"🕒 {time_str}\n\n«{quote}»",
             )
-
             logger.info(
                 "Цитата отправлена в chat_id=%s, message_id=%s",
                 chat_id,
                 sent.message_id,
             )
-
         except Exception:
-            logger.exception(
-                "Ошибка при отправке цитаты в chat_id=%s",
-                chat_id,
+            logger.exception("Ошибка при отправке цитаты в chat_id=%s", chat_id)
+
+    async def _send_reading_reminders(self):
+        chat_id = config.GROUP_CHAT_ID
+        if not chat_id:
+            logger.error("GROUP_CHAT_ID не задан — вечернее напоминание не отправлено.")
+            return
+
+        book = self.user_service.book_svc.get_current() if hasattr(self.user_service, "book_svc") else None
+        # UserService intentionally does not depend on BookService, so checking
+        # only today's mark is enough here. If there is no current book, there is
+        # nothing to remind users about.
+        if not book:
+            logger.info("Текущей книги нет — вечерние напоминания не отправляются.")
+            return
+
+        today = __import__("datetime").date.today().isoformat()
+        users = self.user_service.get_all_users()
+        overdue = []
+        for uid, data in users.items():
+            if data.get("last_mark_date") != today:
+                username = data.get("username") or uid
+                overdue.append(str(username))
+
+        if not overdue:
+            logger.info("Все пользователи отметились за сегодня.")
+            return
+
+        lines = [
+            "⏰ Напоминание о чтении!",
+            "",
+            "Следующие пользователи ещё не отметили прочтение книги сегодня:",
+        ]
+        lines.extend(f"• {name} — вы не прочитали книгу. Пожалуйста, прочитайте её и отметьтесь!" for name in overdue)
+
+        try:
+            sent = await self.bot_app.bot.send_message(chat_id=chat_id, text="\n".join(lines))
+            logger.info(
+                "Вечернее напоминание отправлено: пользователей=%s, message_id=%s",
+                len(overdue),
+                sent.message_id,
             )
-            print("aaaaa------3")
+        except Exception:
+            logger.exception("Ошибка при отправке вечернего напоминания в chat_id=%s", chat_id)
