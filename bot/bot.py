@@ -15,6 +15,7 @@ from .book_service import BookService
 from .quote_service import QuoteService
 from .stats_service import StatsService
 from .scheduler import Scheduler
+from .manual_quote import ManualQuoteHandler
 from .handlers import (
     Handlers, TITLE, AUTHOR, TOTAL_PAGES, NORM,
     EDIT_TITLE, EDIT_AUTHOR, EDIT_TOTAL_PAGES, EDIT_NORM, EDIT_START_DATE, EDIT_CURRENT_PAGE,
@@ -39,7 +40,16 @@ class LibraryBot:
         self.book_svc = BookService()
         self.quote_svc = QuoteService()
         self.stats_svc = StatsService(self.book_svc, self.user_svc)
-        self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc, self.quote_svc)
+        self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc)
+
+        self.manual_quote = ManualQuoteHandler(self.quote_svc)
+        original_keyboard = self.handlers._get_main_keyboard
+
+        def main_keyboard_with_quote(user_id: int):
+            return self.manual_quote.add_button(original_keyboard(user_id))
+
+        self.handlers._get_main_keyboard = main_keyboard_with_quote
+
         self.scheduler = Scheduler(
             self.app,
             self.quote_svc,
@@ -83,6 +93,10 @@ class LibraryBot:
             allow_reentry=True,
         )
         self.app.add_handler(conv_handler)
+
+        self.app.add_handler(
+            CallbackQueryHandler(self.manual_quote.callback, pattern="^send_quote$")
+        )
         self.app.add_handler(CallbackQueryHandler(self.handlers.button_callback))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text))
 
