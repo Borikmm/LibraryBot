@@ -1,4 +1,3 @@
-
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -10,6 +9,7 @@ from telegram.ext import (
 )
 
 from .config import TOKEN
+from .logging_config import configure_logging
 from .user_service import UserService
 from .book_service import BookService
 from .quote_service import QuoteService
@@ -20,13 +20,11 @@ from .handlers import (
     EDIT_TITLE, EDIT_AUTHOR, EDIT_TOTAL_PAGES, EDIT_NORM, EDIT_START_DATE, EDIT_CURRENT_PAGE,
 )
 
-import logging
+configure_logging()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+import logging
 logger = logging.getLogger(__name__)
+
 
 class LibraryBot:
     def __init__(self):
@@ -41,7 +39,7 @@ class LibraryBot:
         self.book_svc = BookService()
         self.quote_svc = QuoteService()
         self.stats_svc = StatsService(self.book_svc, self.user_svc)
-        self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc)
+        self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc, self.quote_svc)
         self.scheduler = Scheduler(
             self.app,
             self.quote_svc,
