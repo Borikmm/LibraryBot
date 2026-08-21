@@ -33,8 +33,8 @@ class LibraryBot:
         self.app = (
             Application.builder()
             .token(TOKEN)
-            .post_init(self._post_init)
-            .post_shutdown(self._post_shutdown)
+            # .post_init(self._post_init)
+            # .post_shutdown(self._post_shutdown)
             .build()
         )
         self.user_svc = UserService()
@@ -65,6 +65,7 @@ class LibraryBot:
                     self.handlers.button_callback,
                     pattern="^(change_book|edit_book)$",
                 ),
+                CallbackQueryHandler(self.handlers.change_book_callback, pattern="^change_book$")
             ],
             states={
                 TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_title)],

@@ -93,30 +93,21 @@ class Handlers:
             asyncio.create_task(self._delete_bot_msg(context, sent.chat_id, sent.message_id, 120))
             return
 
-        if query.data in ("change_book", "edit_book"):
-            if not self.user_svc.is_admin(user_id):
-                await query.edit_message_text("У вас нет прав для изменения книги.")
-                return ConversationHandler.END
-
-            book = self.book_svc.get_current()
-            if query.data == "change_book":
-                await query.edit_message_text("Введите название книги:")
-                context.user_data.pop('edit_book', None)
-                return TITLE
-
-            if not book:
-                await query.edit_message_text("Текущая книга не выбрана. Используйте «Поменять книгу».")
-                return ConversationHandler.END
-
-            context.user_data['edit_book'] = True
-            context.user_data['edit_book_data'] = dict(book)
-            await query.edit_message_text(
-                f"Редактирование текущей книги.\n\nНазвание сейчас: {book.get('title')}\n"
-                "Введите новое название книги:"
-            )
-            return EDIT_TITLE
-
         return ConversationHandler.END
+
+    async def change_book_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик нажатия на кнопку 'Поменять книгу' (запускает диалог)"""
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+
+        if not self.user_svc.is_admin(user_id):
+            await query.edit_message_text("У вас нет прав для смены книги.")
+            return ConversationHandler.END
+
+        # Редактируем текущее сообщение с кнопкой, заменяя его на приглашение ввести название
+        await query.edit_message_text("Введите название книги:")
+        return TITLE
 
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id == context.bot.id:
