@@ -13,6 +13,11 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 CURRENT_BOOK_FILE = os.path.join(DATA_DIR, "current_book.json")
 HISTORY_FILE = os.path.join(DATA_DIR, "books_history.json")
 
+# Часовой пояс для всех задач планировщика.
+# На Render можно переопределить через переменную окружения BOT_TIMEZONE.
+TIMEZONE = os.getenv("BOT_TIMEZONE", "Europe/Amsterdam")
+
 MORNING_TIME = "06:00"
 AFTERNOON_TIME = "13:00"
 EVENING_TIME = "21:00"
+REMINDER_TIME = "22:00"
