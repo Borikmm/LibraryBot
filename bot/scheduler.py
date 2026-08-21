@@ -36,7 +36,7 @@ class Scheduler:
                 args=[time_str] if callback == self._send_quote else [],
                 id=f"{job_name}_{time_str.replace(':', '_')}",
                 replace_existing=True,
-                misfire_grace_time=300,
+                misfire_grace_time=900,
             )
 
         self.scheduler.start()
@@ -106,25 +106,19 @@ class Scheduler:
             logger.info("Все пользователи отметились за сегодня.")
             return
 
-        lines = [
-            "⏰ Напоминание о чтении!",
-            "",
-            "Следующие пользователи ещё не отметили прочтение книги сегодня:",
-        ]
-        lines.extend(
-            f"• {name} — вы не прочитали книгу. Пожалуйста, прочитайте её и отметьтесь!"
-            for name in overdue
-        )
-
         try:
-            sent = await self.bot_app.bot.send_message(
-                chat_id=chat_id,
-                text="\n".join(lines),
-            )
-            logger.info(
-                "Вечернее напоминание отправлено: пользователей=%s, message_id=%s",
-                len(overdue),
-                sent.message_id,
-            )
+            for name in overdue:
+                sent = await self.bot_app.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"⏰ {name}, вы не прочитали книгу сегодня. "
+                        "Пожалуйста, прочитайте её и отметьтесь!"
+                    ),
+                )
+                logger.info(
+                    "Напоминание отправлено пользователю %s, message_id=%s",
+                    name,
+                    sent.message_id,
+                )
         except Exception:
-            logger.exception("Ошибка при отправке вечернего напоминания в chat_id=%s", chat_id)
+            logger.exception("Ошибка при отправке вечерних напоминаний в chat_id=%s", chat_id)
