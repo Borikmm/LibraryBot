@@ -296,6 +296,7 @@ def mark_reading(p: dict, now: datetime) -> dict:
     b["best"] = max(b["best"], b["streak"])
     p["streak"] += 1
     p["best"] = max(p["best"], p["streak"])
+    was_golden = p["golden"]
     grow(p)
     mark = {"day": day, "book_id": b["id"], "pages": pages, "at": iso(now)}
     p["marks"].append(mark)
@@ -315,6 +316,7 @@ def mark_reading(p: dict, now: datetime) -> dict:
         "completed": completed,
         "rewarded": rewarded,
         "golden": p["golden"],
+        "golden_new": p["golden"] and not was_golden,
     }
 
 

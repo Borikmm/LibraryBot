@@ -153,6 +153,7 @@ def _validate(payload, uid, now):
     if p["golden"] != (len(p["tree"]) == d.MAX_GROWTH):
         raise ValueError("gold")
     event_ids, balance = set(), 0
+    reward_marks = set()
     for event in p["coin_events"]:
         if set(event) != {"id", "delta", "kind", "at"} or event["id"] in event_ids:
             raise ValueError("coin event")
@@ -162,6 +163,21 @@ def _validate(payload, uid, now):
         timestamp(event["at"])
         if event["kind"] not in {"reward", "fertilize", "protection"}:
             raise ValueError("coin kind")
+        if event["kind"] == "reward":
+            reward = re.fullmatch(r"reward:[0-9a-f]{32}:([0-9]+)", event["id"])
+            if not reward or int(reward[1]) < 10 or int(reward[1]) % 10:
+                raise ValueError("reward id")
+            if event["at"] not in {m["at"] for m in p["marks"]} or event["at"] in reward_marks:
+                raise ValueError("reward mark")
+            reward_marks.add(event["at"])
+        if event["kind"] == "fertilize" and not re.fullmatch(
+            r"fertilize:[0-9a-f]{12}", event["id"]
+        ):
+            raise ValueError("fertilizer id")
+        if event["kind"] == "protection":
+            if not event["id"].startswith("protect:"):
+                raise ValueError("protection id")
+            date.fromisoformat(event["id"][8:])
         if type(event["delta"]) is not int or event["delta"] != (
             1 if event["kind"] == "reward" else -1
         ):
@@ -171,6 +187,8 @@ def _validate(payload, uid, now):
             raise ValueError("coin balance")
     if balance != p["coins"]:
         raise ValueError("coins")
+    if len(reward_marks) > len(p["marks"]) // 10:
+        raise ValueError("reward count")
     protection_days = set()
     for event in p["protections"]:
         if set(event) != {"day", "kind", "coins"} or event["day"] in protection_days:

@@ -1,105 +1,108 @@
-from telegram import Update
+import asyncio
+from datetime import UTC, datetime, timedelta
+
+import psycopg
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
-    CommandHandler,
     CallbackQueryHandler,
-    ConversationHandler,
+    ChatMemberHandler,
+    CommandHandler,
     MessageHandler,
     filters,
 )
 
-from .config import TOKEN
+from .config import Settings
+from .health import HealthServer
 from .logging_config import configure_logging
-from .user_service import UserService
-from .book_service import BookService
+from .navigation import Controller
 from .quote_service import QuoteService
-from .stats_service import StatsService
 from .scheduler import Scheduler
-from .manual_quote import ManualQuoteHandler
-from .handlers import (
-    Handlers, TITLE, AUTHOR, TOTAL_PAGES, NORM,
-    EDIT_TITLE, EDIT_AUTHOR, EDIT_TOTAL_PAGES, EDIT_NORM, EDIT_START_DATE, EDIT_CURRENT_PAGE,
-)
-
-configure_logging()
-
-import logging
-logger = logging.getLogger(__name__)
+from .service import Service
+from .storage import Store
 
 
 class LibraryBot:
-    def __init__(self):
+    def __init__(self, settings=None):
+        configure_logging()
+        self.settings = settings or Settings.load()
+        self.store = Store(self.settings.database_url)
+        self.store.migrate()
+        self.leader = psycopg.connect(self.settings.database_url, autocommit=True)
+        if not self.leader.execute("SELECT pg_try_advisory_lock(76365002)").fetchone()[0]:
+            self.leader.close()
+            self.store.close()
+            raise RuntimeError("Для этой базы уже запущен экземпляр LibraryBot.")
+        self.service = Service(self.store)
+        self.quotes = QuoteService()
+        self.controller = Controller(self.store, self.service, self.settings, self.quotes)
+        self.scheduler = Scheduler(self.store, self.quotes)
         self.app = (
             Application.builder()
-            .token(TOKEN)
-            .post_init(self._post_init)
-            .post_shutdown(self._post_shutdown)
+            .token(self.settings.token)
+            .concurrent_updates(False)
+            .post_init(self.post_init)
+            .post_shutdown(self.post_shutdown)
             .build()
         )
-        self.user_svc = UserService()
-        self.book_svc = BookService()
-        self.quote_svc = QuoteService()
-        self.stats_svc = StatsService(self.book_svc, self.user_svc)
-        self.handlers = Handlers(self.user_svc, self.book_svc, self.stats_svc)
+        c = self.controller
+        for name, handler in (
+            ("start", c.start),
+            ("menu", c.start),
+            ("read", c.read_command),
+            ("export", c.export_command),
+            ("cancel", c.cancel),
+        ):
+            self.app.add_handler(CommandHandler(name, handler))
+        self.app.add_handler(CallbackQueryHandler(c.callback))
+        self.app.add_handler(MessageHandler(filters.Document.ALL, c.document))
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, c.text))
+        self.app.add_handler(ChatMemberHandler(c.member_changed, ChatMemberHandler.ANY_CHAT_MEMBER))
+        self.app.add_error_handler(c.error)
+        self.health = HealthServer(self.settings.health_host, self.settings.port, self.ready)
 
-        self.manual_quote = ManualQuoteHandler(self.quote_svc)
-        original_keyboard = self.handlers._get_main_keyboard
-
-        def main_keyboard_with_quote(user_id: int):
-            return self.manual_quote.add_button(original_keyboard(user_id))
-
-        self.handlers._get_main_keyboard = main_keyboard_with_quote
-
-        self.scheduler = Scheduler(
-            self.app,
-            self.quote_svc,
-            self.user_svc,
-            self.book_svc,
+    def ready(self):
+        with self.store.pool.connection() as conn:
+            conn.execute("SELECT 1")
+        return bool(
+            self.app.running
+            and self.app.updater.running
+            and self.scheduler.last_tick
+            and datetime.now(UTC) - self.scheduler.last_tick < timedelta(minutes=2)
         )
-        self._register_handlers()
 
-    async def _post_init(self, application):
-        logger.info("Запускаем планировщик...")
-        self.scheduler.start()
-
-    async def _post_shutdown(self, application):
-        logger.info("Останавливаем планировщик...")
-        self.scheduler.stop()
-
-    def _register_handlers(self):
-        self.app.add_handler(CommandHandler("start", self.handlers.start_command))
-
-        conv_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler("change_book", self.handlers.change_book_start),
-                CallbackQueryHandler(
-                    self.handlers.button_callback,
-                    pattern="^(change_book|edit_book)$",
-                )
-            ],
-            states={
-                TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_title)],
-                AUTHOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_author)],
-                TOTAL_PAGES: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_total)],
-                NORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.change_book_norm)],
-                EDIT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_title)],
-                EDIT_AUTHOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_author)],
-                EDIT_TOTAL_PAGES: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_total)],
-                EDIT_NORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_norm)],
-                EDIT_START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_start_date)],
-                EDIT_CURRENT_PAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.edit_book_current_page)],
-            },
-            fallbacks=[CommandHandler("cancel", self.handlers.cancel)],
-            allow_reentry=True,
+    async def post_init(self, app):
+        await app.bot.set_my_commands(
+            [
+                BotCommand("start", "Главное меню"),
+                BotCommand("read", "Отметить чтение в ЛС"),
+                BotCommand("export", "Экспорт личного профиля"),
+                BotCommand("cancel", "Отменить ввод"),
+            ]
         )
-        self.app.add_handler(conv_handler)
-
-        self.app.add_handler(
-            CallbackQueryHandler(self.manual_quote.callback, pattern="^send_quote$")
+        await asyncio.to_thread(self.recover_deliveries)
+        app.job_queue.run_repeating(
+            self.scheduler.tick,
+            interval=30,
+            first=1,
+            name="personal-schedules",
+            job_kwargs={"max_instances": 1},
         )
-        self.app.add_handler(CallbackQueryHandler(self.handlers.button_callback))
-        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handlers.handle_text))
+
+    def recover_deliveries(self):
+        with self.store.pool.connection() as conn:
+            conn.execute("UPDATE deliveries SET status='uncertain' WHERE status='sending'")
+
+    async def post_shutdown(self, app):
+        await asyncio.to_thread(self.health.close)
+        self.leader.close()
+        self.store.close()
 
     def run(self):
-        logger.info("Бот запускается...")
-        self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+        self.health.start()
+        try:
+            self.app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
+        finally:
+            if not self.leader.closed:
+                self.leader.close()
+                self.store.close()

@@ -101,6 +101,12 @@ class Service:
                     "В файле отсутствуют уже зачтённые дни. Используй свежий экспорт."
                 )
             imported["group_id"] = None
+            if current["golden"]:
+                imported["golden"], imported["tree"] = True, current["tree"]
+            if current["next_mark_at"]:
+                imported["next_mark_at"] = max(
+                    imported["next_mark_at"] or "", current["next_mark_at"]
+                )
             imported["revision"] = current["revision"]
             imported["onboarded"] = True
             ps[uid] = imported

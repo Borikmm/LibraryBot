@@ -93,7 +93,12 @@ class Store:
         with self.locked(uid) as (conn, profiles):
             events = settle_days(profiles[uid], now)
             for event in events:
-                self.enqueue(conn, uid, "boundary:" + event["day"], {"kind": "boundary", **event})
+                self.enqueue(
+                    conn,
+                    uid,
+                    "boundary:" + event["day"],
+                    {**event, "kind": "boundary", "result": event["kind"]},
+                )
             return events
 
     def action(self, uid, kind, payload, now=None) -> str:
