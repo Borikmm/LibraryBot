@@ -1,0 +1,47 @@
+name: librarybot
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: librarybot
+      POSTGRES_DB: librarybot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U librarybot -d librarybot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+  bot:
+    build: .
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN in .env}
+      DATABASE_URL: postgresql://librarybot:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/librarybot
+      BOT_TIMEZONE: ${BOT_TIMEZONE:-Asia/Chita}
+      HEALTH_HOST: 0.0.0.0
+      PORT: 10000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - 127.0.0.1:10000:10000
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  postgres_data:

@@ -1,24 +1,38 @@
 import os
+from dataclasses import dataclass
+from pathlib import Path
+
 from dotenv import load_dotenv
 
+from .domain import validate_timezone
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
+QUOTES_FILE = BASE_DIR / "scripts" / "data" / "quotes.txt"
 
-TOKEN = os.getenv("BOT_TOKEN")
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", 0))
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-QUOTES_FILE = os.path.join(BASE_DIR, "scripts", "data", "quotes.txt")
-USERS_FILE = os.path.join(DATA_DIR, "users.json")
-CURRENT_BOOK_FILE = os.path.join(DATA_DIR, "current_book.json")
-HISTORY_FILE = os.path.join(DATA_DIR, "books_history.json")
+@dataclass(frozen=True)
+class Settings:
+    token: str
+    database_url: str
+    timezone: str = "Asia/Chita"
+    health_host: str = "127.0.0.1"
+    port: int = 10000
 
-# Часовой пояс для всех задач планировщика.
-# На Render можно переопределить через переменную окружения BOT_TIMEZONE.
-TIMEZONE = os.getenv("BOT_TIMEZONE", "Asia/Chita")
-
-MORNING_TIME = "06:00"
-AFTERNOON_TIME = "13:00"
-EVENING_TIME = "21:00"
-REMINDER_TIME = "22:00"
+    @classmethod
+    def load(cls):
+        load_dotenv(BASE_DIR / ".env")
+        if not os.getenv("DATABASE_URL"):
+            load_dotenv(BASE_DIR / ".local" / "db.env")
+        token, dsn = os.getenv("BOT_TOKEN"), os.getenv("DATABASE_URL")
+        if not token:
+            raise RuntimeError("Укажи BOT_TOKEN в локальном .env или переменных окружения сервера.")
+        if not dsn or not dsn.startswith(("postgresql://", "postgres://")):
+            raise RuntimeError("Укажи DATABASE_URL для PostgreSQL.")
+        timezone = validate_timezone(os.getenv("BOT_TIMEZONE", "Asia/Chita"))
+        return cls(
+            token,
+            dsn,
+            timezone,
+            os.getenv("HEALTH_HOST", "127.0.0.1"),
+            int(os.getenv("PORT", "10000")),
+        )
