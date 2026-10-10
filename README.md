@@ -74,7 +74,7 @@ sh scripts/restore.sh backups/librarybot-YYYYMMDDTHHMMSSZ.dump
 pip install -r requirements.lock -r requirements-dev.txt
 export TEST_DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/TEST_DATABASE
 ruff check bot tests main.py app.py
-pytest -q
+python -m pytest -q
 ```
 
 PostgreSQL-тесты используют временную схему с уникальным именем в указанной базе. Без `TEST_DATABASE_URL` или локальной `.local/db.env` они пропускаются. CI всегда поднимает PostgreSQL 18 и запускает все тесты, затем собирает Docker-образ.

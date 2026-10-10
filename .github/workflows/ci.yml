@@ -29,5 +29,5 @@ jobs:
           cache: pip
       - run: pip install -r requirements.lock -r requirements-dev.txt
       - run: ruff check bot tests main.py app.py
-      - run: pytest -q
+      - run: python -m pytest -q
       - run: docker build -t librarybot:ci .
