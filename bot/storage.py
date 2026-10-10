@@ -102,7 +102,7 @@ class Store:
             return events
 
     def action(self, uid, kind, payload, now=None) -> str:
-        token = secrets.token_hex(6)
+        token = secrets.token_hex(8)
         now = now or datetime.now(UTC)
         with self.pool.connection() as conn:
             conn.execute(
@@ -142,7 +142,7 @@ class Store:
             )
 
     def create_menu(self, uid, chat_id) -> str:
-        token = secrets.token_hex(4)
+        token = secrets.token_hex(8)
         with self.pool.connection() as conn:
             conn.execute(
                 "INSERT INTO menus(token,owner_id,chat_id) VALUES (%s,%s,%s)", (token, uid, chat_id)
@@ -152,6 +152,28 @@ class Store:
     def bind_menu(self, token, message_id):
         with self.pool.connection() as conn:
             conn.execute("UPDATE menus SET message_id=%s WHERE token=%s", (message_id, token))
+
+    def remember_route(self, token, route):
+        with self.pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                "SELECT history FROM menus WHERE token=%s FOR UPDATE", (token,)
+            ).fetchone()
+            history = row["history"]
+            if not history or history[-1] != route:
+                history = (history + [route])[-50:]
+                conn.execute("UPDATE menus SET history=%s WHERE token=%s", (Jsonb(history), token))
+            return len(history)
+
+    def back_route(self, token):
+        with self.pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                "SELECT history FROM menus WHERE token=%s FOR UPDATE", (token,)
+            ).fetchone()
+            history = row["history"]
+            if len(history) > 1:
+                history.pop()
+                conn.execute("UPDATE menus SET history=%s WHERE token=%s", (Jsonb(history), token))
+            return history[-1] if history else "ghome:0"
 
     def menu(self, token, uid, chat_id, message_id):
         with self.pool.connection() as conn:

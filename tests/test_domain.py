@@ -9,6 +9,27 @@ from bot.backup import validate_backup
 START = datetime(2026, 1, 29, 12, tzinfo=UTC)
 
 
+@pytest.mark.parametrize("field", ["norm", "seed", "x", "y", "plot"])
+def test_backup_rejects_string_numbers(field):
+    p = profile()
+    p["books"][0][field] = str(p["books"][0][field])
+    payload = {
+        "format": "LibraryBot",
+        "version": 1,
+        "owner_id": 1,
+        "exported_at": d.iso(START),
+        "profile": p,
+    }
+    with pytest.raises(d.RuleError):
+        validate_backup(payload, 1, START)
+
+
+def test_unfinished_book_never_displays_100_percent():
+    p = profile(200, 199)
+    d.mark_reading(p, START)
+    assert d.percentage(p["books"][0]) == 99
+
+
 def profile(total=100, norm=25):
     p = d.new_profile(1, "Читатель", "UTC", START)
     d.add_book(p, "Колобок", "Народ", total, norm, START)

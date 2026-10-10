@@ -50,6 +50,7 @@ class View:
     text: str
     rows: list = field(default_factory=list)
     photo: str | None = None
+    route: str | None = None
 
 
 def back(action="home"):
@@ -61,7 +62,7 @@ def home(p, now):
     text = f"<i>«{QUOTE}»</i>\n\n"
     if b:
         emoji, stage = d.stage(b)
-        pc = b["page"] / b["total"] * 100
+        pc = d.percentage(b)
         from .scheduler import marked_today
 
         marked = marked_today(p, now)
@@ -155,7 +156,7 @@ def book(p, book_id, private=True):
     status = {"active": "Читаю", "paused": "На паузе", "completed": "Завершена"}[b["status"]]
     text = (
         f"<b>{e(b['title'])} — {e(b['author'])}</b>\n<pre>{e(compact_tree(b))}</pre>\n"
-        f"{emoji} {title}: {b['page'] / b['total'] * 100:.0f}%\n"
+        f"{emoji} {title}: {d.percentage(b)}%\n"
         f"Страницы: {b['page']} из {b['total']}\nДневная норма: {b['norm']} страниц\n"
         f"Серия книги: {b['streak']} дней · Рекорд: {b['best']} дней\n"
         f"Начало: {b['start']}\nЗавершение: {b['end'] or '—'}\nСтатус: {status}"
@@ -167,7 +168,7 @@ def book(p, book_id, private=True):
     if private:
         rows += [[("Изменить", "editmenu:" + book_id), ("Удалить дерево", "delete:" + book_id)]]
     rows += [back("home" if private else f"forest:{uid}:{b['plot']}:0")]
-    return View(text, rows)
+    return View(text, rows, route=f"book:{uid}:{book_id}")
 
 
 def history(p, book_id, page):
@@ -184,7 +185,11 @@ def history(p, book_id, page):
         nav += [("←", f"history:{uid}:{book_id}:{page - 1}")]
     if len(marks) > (page + 1) * 10:
         nav += [("→", f"history:{uid}:{book_id}:{page + 1}")]
-    return View(text, ([nav] if nav else []) + [back(f"book:{uid}:{book_id}")])
+    return View(
+        text,
+        ([nav] if nav else []) + [back(f"book:{uid}:{book_id}")],
+        route=f"history:{uid}:{book_id}:{page}",
+    )
 
 
 def main_tree(p, private=True, return_action=None):
@@ -196,8 +201,10 @@ def main_tree(p, private=True, return_action=None):
         text += f"Серия: {p['streak']} дней · Рекорд: {p['best']} дней\nМонеты: {p['coins']}\n"
     if p["golden"]:
         text += "\n🏆 Золотое дерево — твоя постоянная награда!"
-    else:
+    elif p["tree"]:
         text += "\n<pre>" + e(d.render_tree(p)) + "</pre>"
+    else:
+        text += "\nПока нет символов. Отправь ✅ после чтения."
     rows = []
     if not p["golden"]:
         rows += [[("Удобрить за 1 монету" if private else "Подкинуть монетку", f"fert:{uid}")]]
@@ -205,13 +212,13 @@ def main_tree(p, private=True, return_action=None):
         [("Мой лес" if private else "Лес", f"forest:{uid}:0:0")],
         back(return_action or ("home" if private else f"person:{uid}")),
     ]
-    return View(text, rows, "golden-tree.png" if p["golden"] else None)
+    return View(text, rows, "golden-tree.png" if p["golden"] else None, f"tree:{uid}")
 
 
 def forest(p, plot=0, page=0, private=True):
     uid = p["owner_id"]
     bs = [b for b in p["books"] if b["plot"] == plot]
-    grid = [["·" for _ in range(9)] for _ in range(7)]
+    grid = [["▫️" for _ in range(9)] for _ in range(7)]
     grid[3][4] = "🏆" if p["golden"] else "🌳"
     for b in bs:
         grid[b["y"]][b["x"]] = d.stage(b)[0]
@@ -237,7 +244,7 @@ def forest(p, plot=0, page=0, private=True):
     if private:
         rows += [[("Общая статистика", f"stats:{uid}")]]
     rows += [back("home" if private else f"person:{uid}")]
-    return View(text, rows)
+    return View(text, rows, route=f"forest:{uid}:{plot}:{page}")
 
 
 def stats(p, now, private=True):
@@ -253,7 +260,9 @@ def stats(p, now, private=True):
     if private:
         text += f"\nМонеты: {p['coins']}"
     return View(
-        text, [back(f"forest:{p['owner_id']}:0:0" if private else f"person:{p['owner_id']}")]
+        text,
+        [back(f"forest:{p['owner_id']}:0:0" if private else f"person:{p['owner_id']}")],
+        route=f"stats:{p['owner_id']}",
     )
 
 

@@ -132,7 +132,8 @@ class PrivateHandlers:
             )
         elif action == "tz":
             await self.db(self.store.mutate, uid, lambda p: d.change_timezone(p, args[0], now))
-            view = v.settings(await self.db(self.store.get, uid))
+            title = await self.db(self.store.group_title, p["group_id"]) if p["group_id"] else None
+            view = v.settings(await self.db(self.store.get, uid), title)
         elif action == "tzinput":
             context.user_data["flow"] = {"kind": "timezone"}
             view = v.View(
@@ -343,7 +344,7 @@ class PrivateHandlers:
             b = result["book"]
             text = (
                 f"✅ Отметка зачтена! +{result['pages']} страниц\n"
-                f"{v.e(b['title'])}: {b['page']} из {b['total']} — {b['page'] / b['total'] * 100:.0f}%"
+                f"{v.e(b['title'])}: {b['page']} из {b['total']} — {d.percentage(b)}%"
             )
             if result["completed"]:
                 text += "\n🌲 Книга завершена! Дерево сохранено в лесу. На следующий день действует бесплатная защита."

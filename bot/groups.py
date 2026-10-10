@@ -124,7 +124,7 @@ class GroupHandlers:
         rows += [
             [("Подключиться в ЛС", f"url:https://t.me/{context.bot.username}?start=g_{abs(gid)}")]
         ]
-        await self.display(update, v.View(text, rows), token)
+        await self.display(update, v.View(text, rows, route=f"ghome:{page}"), token)
 
     async def group_action(self, update, context, action, args, token):
         gid, viewer = update.effective_chat.id, update.effective_user.id
@@ -149,6 +149,7 @@ class GroupHandlers:
                 v.View(
                     "<b>Пользователи</b>\nВыбери участника.",
                     rows + ([nav] if nav else []) + [v.back("ghome:0")],
+                    route=f"users:{page}",
                 ),
                 token,
             )
@@ -171,7 +172,9 @@ class GroupHandlers:
                 f"<b>{v.e(p['name'])}</b>\nЛес: {'открыт' if p['show_forest'] else 'скрыт'}\n"
                 f"Статистика: {'открыта' if p['show_stats'] else 'скрыта'}"
             )
-            await self.display(update, v.View(text, rows + [v.back("users:0")]), token)
+            await self.display(
+                update, v.View(text, rows + [v.back("users:0")], route=f"person:{target}"), token
+            )
             return
         if action in {"tree", "forest", "book", "history", "stats", "fert", "fertyes", "cancelact"}:
             await self.shared_action(update, context, action, args, token)

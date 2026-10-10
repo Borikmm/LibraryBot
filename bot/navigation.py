@@ -55,9 +55,20 @@ class Controller(PrivateHandlers, GroupHandlers):
             [[InlineKeyboardButton("Открыть ЛС", url=f"https://t.me/{username}")]]
         )
 
+    async def menu_keyboard(self, token, chat_id, view):
+        rows = view.rows
+        if chat_id < 0 and view.route:
+            depth = await self.db(self.store.remember_route, token, view.route)
+            if depth > 1:
+                rows = [
+                    [(label, "back" if label == "← Назад" else action) for label, action in row]
+                    for row in rows
+                ]
+        return self.keyboard(token, rows)
+
     async def send_to(self, bot, uid, chat_id, view, token=None):
         token = token or await self.db(self.store.create_menu, uid, chat_id)
-        markup = self.keyboard(token, view.rows)
+        markup = await self.menu_keyboard(token, chat_id, view)
         photo = view.photo or ("forest.png" if chat_id < 0 else None)
         if photo:
             with (ASSETS / photo).open("rb") as file:
@@ -75,7 +86,7 @@ class Controller(PrivateHandlers, GroupHandlers):
         message, uid = update.effective_message, update.effective_user.id
         if not token or not update.callback_query:
             return await self.send_to(update.get_bot(), uid, update.effective_chat.id, view)
-        markup = self.keyboard(token, view.rows)
+        markup = await self.menu_keyboard(token, update.effective_chat.id, view)
         photo = view.photo or ("forest.png" if update.effective_chat.type != "private" else None)
         try:
             if photo and message.photo:
@@ -123,6 +134,8 @@ class Controller(PrivateHandlers, GroupHandlers):
                 query.message.chat_id,
                 query.message.message_id,
             )
+            if route == "back" and update.effective_chat.type != "private":
+                route = await self.db(self.store.back_route, token)
             action, *args = route.split(":")
             await query.answer()
             if update.effective_chat.type == "private":

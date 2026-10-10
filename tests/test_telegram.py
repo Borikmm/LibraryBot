@@ -197,7 +197,7 @@ def test_long_cards_fit_captions_and_callback_data():
 
         rendered = unescape(re.sub(r"<[^>]+>", "", view.text))
         assert len(rendered.encode("utf-16-le")) // 2 <= 1024
-        Controller.keyboard("12345678", view.rows)
+        Controller.keyboard("1234567890abcdef", view.rows)
 
 
 async def test_group_long_names_and_single_message_navigation(ui, store):
@@ -231,3 +231,29 @@ async def test_group_consent_required_and_private_default(ui, store):
     await click(ui, 1, "Подключиться")
     p = store.get(1)
     assert p["group_id"] == -100 and not p["show_forest"] and not p["show_stats"]
+
+
+async def test_group_back_returns_to_previous_screen_in_same_message(ui, store):
+    store.ensure(1, "Reader", "UTC", START)
+    store.group(-100, "Group")
+    store.mutate(1, lambda p: d.add_book(p, "Книга", "Автор", 100, 25, START))
+    store.mutate(1, lambda p: p.update(group_id=-100, show_forest=True))
+    await text(ui, 1, "/start", -100)
+    mid = last_message(ui, -100)["message_id"]
+    for label in ("Пользователи", "Reader", "Посмотреть лес"):
+        await click(ui, 1, label, gid=-100)
+    forest = last_message(ui, -100)["caption"]
+    await click(ui, 1, "Книга", gid=-100)
+    book = last_message(ui, -100)["caption"]
+    await click(ui, 1, "Чтение по дням", gid=-100)
+    # The return route lives in PostgreSQL, not in the handler's transient user_data.
+    ui[0].user_data[1].clear()
+    await click(ui, 1, "← Назад", gid=-100)
+    assert last_message(ui, -100)["caption"] == book
+    await click(ui, 1, "← Назад", gid=-100)
+    assert last_message(ui, -100)["caption"] == forest
+    await click(ui, 1, "Главное дерево", gid=-100)
+    await click(ui, 1, "← Назад", gid=-100)
+    assert last_message(ui, -100)["caption"] == forest
+    assert last_message(ui, -100)["message_id"] == mid
+    assert len([m for (chat, _), m in ui[1].messages.items() if chat == -100]) == 1

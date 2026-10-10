@@ -106,6 +106,10 @@ def stage(b: dict) -> tuple[str, str]:
     return next((emoji, title) for bound, emoji, title in STAGES if percent < bound)
 
 
+def percentage(b: dict) -> int:
+    return b["page"] * 100 // b["total"]
+
+
 def add_book(p: dict, title: str, author: str, total, norm, now: datetime) -> dict:
     if not title.strip() or not author.strip() or len(title) > 200 or len(author) > 200:
         raise RuleError("Название и автор должны содержать от 1 до 200 символов.")

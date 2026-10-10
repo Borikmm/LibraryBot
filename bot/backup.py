@@ -10,6 +10,12 @@ from . import domain as d
 MAX_BACKUP_BYTES = 5 * 1024 * 1024
 
 
+def backup_integer(value, minimum=0, maximum=1_000_000):
+    if type(value) is not int:
+        raise d.RuleError("Числовые поля экспорта должны быть целыми числами JSON.")
+    return d.integer(value, minimum, maximum)
+
+
 def parse_backup(raw: bytes, uid: int, now: datetime) -> dict:
     if len(raw) > MAX_BACKUP_BYTES:
         raise d.RuleError("Файл слишком большой. Максимум — 5 МБ.")
@@ -31,9 +37,18 @@ def validate_backup(payload: dict, uid: int, now: datetime) -> dict:
 
 
 def _validate(payload, uid, now):
-    if payload["format"] != "LibraryBot" or payload["version"] != 1:
+    if (
+        payload["format"] != "LibraryBot"
+        or type(payload["version"]) is not int
+        or payload["version"] != 1
+    ):
         raise d.RuleError("Версия или формат экспорта не поддерживается.")
-    if payload["owner_id"] != uid or payload["profile"]["owner_id"] != uid:
+    if (
+        type(payload["owner_id"]) is not int
+        or type(payload["profile"]["owner_id"]) is not int
+        or payload["owner_id"] != uid
+        or payload["profile"]["owner_id"] != uid
+    ):
         raise d.RuleError("Этот экспорт принадлежит другому пользователю Telegram.")
     p = copy.deepcopy(payload["profile"])
     expected = set(d.new_profile(uid, "", "UTC", now))
@@ -46,7 +61,7 @@ def _validate(payload, uid, now):
         if not isinstance(p[key], bool):
             raise ValueError(key)
     for key in ("streak", "best", "coins", "revision"):
-        d.integer(p[key])
+        backup_integer(p[key])
     if p["streak"] > p["best"] or not re.fullmatch(r"[0-9a-f]{32}", p["series_id"]):
         raise ValueError("series")
     if len(p["quote_times"]) > 24 or len(set(p["quote_times"])) != len(p["quote_times"]):
@@ -98,13 +113,13 @@ def _validate(payload, uid, now):
             if not isinstance(b[key], str) or not 1 <= len(b[key]) <= 200:
                 raise ValueError(key)
         for key in ("total", "norm"):
-            d.integer(b[key], 1)
-        d.integer(b["page"], 0, b["total"])
+            backup_integer(b[key], 1)
+        backup_integer(b["page"], 0, b["total"])
         for key in ("streak", "best", "plot"):
-            d.integer(b[key])
-        d.integer(b["seed"], 0, 2**31 - 1)
-        d.integer(b["x"], 0, 8)
-        d.integer(b["y"], 0, 6)
+            backup_integer(b[key])
+        backup_integer(b["seed"], 0, 2**31 - 1)
+        backup_integer(b["x"], 0, 8)
+        backup_integer(b["y"], 0, 6)
         pos = (b["plot"], b["x"], b["y"])
         if pos in positions or pos[1:] == (4, 3):
             raise ValueError("position")
@@ -133,7 +148,7 @@ def _validate(payload, uid, now):
             raise ValueError("mark day")
         days.add(mark["day"])
         timestamp(mark["at"])
-        d.integer(mark["pages"])
+        backup_integer(mark["pages"])
         if mark["book_id"] is not None and mark["book_id"] not in books:
             raise ValueError("mark book")
         if mark["book_id"] is None and mark["pages"] != 0:
@@ -147,6 +162,8 @@ def _validate(payload, uid, now):
     if not isinstance(p["tree"], list) or len(p["tree"]) > d.MAX_GROWTH:
         raise ValueError("tree")
     for cell in p["tree"]:
+        if len(cell) != 3 or type(cell[0]) is not int or type(cell[1]) is not int:
+            raise ValueError("cell types")
         if len(cell) != 3 or tuple(cell) not in allowed or tuple(cell[:2]) in cells:
             raise ValueError("cell")
         cells.add(tuple(cell[:2]))
@@ -171,7 +188,7 @@ def _validate(payload, uid, now):
                 raise ValueError("reward mark")
             reward_marks.add(event["at"])
         if event["kind"] == "fertilize" and not re.fullmatch(
-            r"fertilize:[0-9a-f]{12}", event["id"]
+            r"fertilize:(?:[0-9a-f]{12}|[0-9a-f]{16})", event["id"]
         ):
             raise ValueError("fertilizer id")
         if event["kind"] == "protection":
@@ -198,5 +215,5 @@ def _validate(payload, uid, now):
             raise ValueError("protection day")
         if event["kind"] not in {"free", "coin", "lost"}:
             raise ValueError("protection kind")
-        d.integer(event["coins"])
+        backup_integer(event["coins"])
     return p
