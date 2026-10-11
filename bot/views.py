@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from html import escape
 
-from . import domain as d
+from . import bonsai, domain as d
 
 e = escape
 QUOTE = "Книги — это семена, брошенные в землю человеческого разума; они прорастают и приносят плоды в виде новых идей и поступков"
@@ -137,6 +137,9 @@ def books(p, page=0):
 
 
 def compact_tree(b):
+    if b.get("tree_plan") is not None:
+        tree = bonsai.Tree.from_dict(b["tree_plan"])
+        return bonsai.render_tree(tree, b["page"] * tree.max_parts // b["total"])
     layouts = [
         "  .\n  |",
         "  *\n /|",
@@ -201,8 +204,10 @@ def main_tree(p, private=True, return_action=None):
         text += f"Серия: {p['streak']} дней · Рекорд: {p['best']} дней\nМонеты: {p['coins']}\n"
     if p["golden"]:
         text += "\n🏆 Золотое дерево — твоя постоянная награда!"
-    elif p["tree"]:
+    elif p["tree"] or p.get("tree_plan") is not None:
         text += "\n<pre>" + e(d.render_tree(p)) + "</pre>"
+        if not p["tree"]:
+            text += "\nПока нет частей. Отправь ✅ после чтения."
     else:
         text += "\nПока нет символов. Отправь ✅ после чтения."
     rows = []

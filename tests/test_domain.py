@@ -15,7 +15,7 @@ def test_backup_rejects_string_numbers(field):
     p["books"][0][field] = str(p["books"][0][field])
     payload = {
         "format": "LibraryBot",
-        "version": 1,
+        "version": 2,
         "owner_id": 1,
         "exported_at": d.iso(START),
         "profile": p,
@@ -109,7 +109,7 @@ def test_golden_permanent_exactly_365_visible_symbols():
     drawing = d.render_tree(p)
     assert sum(not c.isspace() for c in drawing) == 365
     assert len(drawing.splitlines()) >= 15
-    assert all(len(line) <= 31 for line in drawing.splitlines())
+    assert all(len(line) <= 28 for line in drawing.splitlines())
     assert p["golden"] and not d.grow(p)
     d.mark_reading(p, START)
     d.settle_days(p, START + timedelta(days=2))
@@ -171,7 +171,7 @@ def test_backup_roundtrip_and_corruption():
     d.mark_reading(p, START)
     payload = {
         "format": "LibraryBot",
-        "version": 1,
+        "version": 2,
         "owner_id": 1,
         "exported_at": d.iso(START),
         "profile": p,

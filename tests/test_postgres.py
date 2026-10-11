@@ -61,7 +61,7 @@ def test_fertilizer_transaction_repeat_cancel_full_tree(store):
     store.cancel_action(token, 1)
     with pytest.raises(d.RuleError):
         svc.fertilize(1, token, now)
-    store.mutate(2, lambda p: p.update(tree=[list(c) for c in d.TREE_CELLS], golden=True))
+    store.mutate(2, lambda p: [d.grow(p) for _ in range(364)])
     token = store.action(1, "fertilize", {"target": 2}, now)
     with pytest.raises(d.RuleError, match="золотое"):
         svc.fertilize(1, token, now)

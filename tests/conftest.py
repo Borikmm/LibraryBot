@@ -15,6 +15,7 @@ def store():
     dsn = os.getenv("TEST_DATABASE_URL") or dotenv_values(Path(".local/db.env")).get("DATABASE_URL")
     if not dsn:
         pytest.skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    dsn = make_conninfo(dsn, connect_timeout=5)
     schema = "test_librarybot_" + uuid.uuid4().hex
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(psycopg.sql.SQL("CREATE SCHEMA {}").format(psycopg.sql.Identifier(schema)))

@@ -11,6 +11,7 @@ from telegram.error import BadRequest
 from . import domain as d, views as v
 from .groups import GroupHandlers
 from .private import PrivateHandlers
+from .preview import PreviewStore
 
 logger = logging.getLogger(__name__)
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -19,6 +20,7 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 class Controller(PrivateHandlers, GroupHandlers):
     def __init__(self, store, service, settings, quotes):
         self.store, self.service, self.settings, self.quotes = store, service, settings, quotes
+        self.preview = PreviewStore()
 
     @staticmethod
     def now():
@@ -69,7 +71,7 @@ class Controller(PrivateHandlers, GroupHandlers):
     async def send_to(self, bot, uid, chat_id, view, token=None):
         token = token or await self.db(self.store.create_menu, uid, chat_id)
         markup = await self.menu_keyboard(token, chat_id, view)
-        photo = view.photo or ("forest.png" if chat_id < 0 else None)
+        photo = view.photo
         if photo:
             with (ASSETS / photo).open("rb") as file:
                 message = await bot.send_photo(
@@ -87,7 +89,7 @@ class Controller(PrivateHandlers, GroupHandlers):
         if not token or not update.callback_query:
             return await self.send_to(update.get_bot(), uid, update.effective_chat.id, view)
         markup = await self.menu_keyboard(token, update.effective_chat.id, view)
-        photo = view.photo or ("forest.png" if update.effective_chat.type != "private" else None)
+        photo = view.photo
         try:
             if photo and message.photo:
                 with (ASSETS / photo).open("rb") as file:
@@ -98,7 +100,7 @@ class Controller(PrivateHandlers, GroupHandlers):
             elif not photo and not message.photo:
                 await message.edit_text(view.text, parse_mode="HTML", reply_markup=markup)
             else:
-                # Telegram cannot convert a text message to/from photo. Private menus are replaced.
+                # Telegram cannot convert text/photo; the permanent golden reward is an image.
                 await message.delete()
                 return await self.send_to(
                     update.get_bot(), uid, update.effective_chat.id, view, token
@@ -137,6 +139,12 @@ class Controller(PrivateHandlers, GroupHandlers):
             if route == "back" and update.effective_chat.type != "private":
                 route = await self.db(self.store.back_route, token)
             action, *args = route.split(":")
+            if action == "demo":
+                if update.effective_chat.type != "private":
+                    raise d.RuleError("Просмотр доступен только владельцу в ЛС.")
+                await self.preview_action(update, context, args, token)
+                await query.answer()
+                return
             await query.answer()
             if update.effective_chat.type == "private":
                 await self.db(self.store.settle, query.from_user.id, self.now())

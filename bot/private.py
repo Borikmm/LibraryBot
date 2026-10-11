@@ -340,6 +340,11 @@ class PrivateHandlers:
             await update.effective_message.reply_text("Отправь ✅ в ЛС с ботом.")
             return
         try:
+            preview = await self.db(self.preview.advance, update.effective_user.id, self.now())
+            if preview is not None:
+                context.user_data.pop("flow", None)
+                await self.display(update, preview.view())
+                return
             result = await self.db(self.service.mark, update.effective_user.id, self.now())
             b = result["book"]
             text = (
@@ -360,6 +365,25 @@ class PrivateHandlers:
                 await self.display(update, v.main_tree(p))
         except d.RuleError as exc:
             await update.effective_message.reply_text(str(exc))
+
+    async def preview_action(self, update, context, args, token):
+        uid, now = update.effective_user.id, self.now()
+        if len(args) != 1 or args[0] not in {"1", "10", "365", "exit"}:
+            raise d.RuleError("Неизвестное действие просмотра.")
+        if args[0] == "exit":
+            if not await self.db(self.preview.disable, uid, now):
+                raise d.RuleError("Время просмотра истекло. Открой /start.")
+            view = v.View(
+                "Просмотр завершён. Снова действует одна отметка чтения в день.",
+                [v.back("home")],
+            )
+        else:
+            preview = await self.db(self.preview.advance, uid, now, int(args[0]))
+            if preview is None:
+                raise d.RuleError("Время просмотра истекло. Открой /start.")
+            view = preview.view()
+        context.user_data.pop("flow", None)
+        await self.display(update, view, token)
 
     async def export_command(self, update, context):
         if update.effective_chat.type != "private":
