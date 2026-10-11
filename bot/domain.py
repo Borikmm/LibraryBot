@@ -7,7 +7,10 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import bonsai
+
 MAX_GROWTH = 365
+BOOK_PARTS = 100
 STAGES = [
     (20, "🌱", "Росток"),
     (40, "🌿", "Молодой побег"),
@@ -51,6 +54,7 @@ def new_profile(uid: int, name: str, timezone: str, now: datetime) -> dict:
         "coins": 0,
         "series_id": uuid.uuid4().hex,
         "tree": [],
+        "tree_plan": bonsai.generate_tree(MAX_GROWTH).to_dict(),
         "golden": False,
         "last_mark_date": None,
         "next_mark_at": None,
@@ -145,6 +149,7 @@ def add_book(p: dict, title: str, author: str, total, norm, now: datetime) -> di
         "y": y,
         "seed": random.randrange(2**31),
     }
+    book["tree_plan"] = bonsai.generate_tree(BOOK_PARTS, book["seed"]).to_dict()
     p["books"].append(book)
     p["onboarded"] = True
     return book
@@ -216,12 +221,17 @@ def tree_positions() -> list[tuple[int, int, str]]:
     return result[:MAX_GROWTH]
 
 
-TREE_CELLS = tree_positions()
+TREE_CELLS = tree_positions()  # Version 1 ASCII trees keep their original growth algorithm.
 
 
 def grow(p: dict) -> bool:
     if p["golden"] or len(p["tree"]) >= MAX_GROWTH:
         return False
+    if p.get("tree_plan") is not None:
+        part = p["tree_plan"]["parts"][len(p["tree"])]
+        p["tree"].append([part["x"], part["y"], part["emoji"]])
+        p["golden"] = len(p["tree"]) == MAX_GROWTH
+        return True
     used = {(c[0], c[1]) for c in p["tree"]}
     candidates = [c for c in TREE_CELLS if c[:2] not in used]
     near = [c for c in candidates if any(abs(c[0] - x) + abs(c[1] - y) <= 2 for x, y in used)]
@@ -232,6 +242,8 @@ def grow(p: dict) -> bool:
 
 
 def render_tree(p: dict) -> str:
+    if p.get("tree_plan") is not None:
+        return bonsai.render_tree(bonsai.Tree.from_dict(p["tree_plan"]), len(p["tree"]))
     if not p["tree"]:
         return "·"
     canvas = [[" " for _ in range(31)] for _ in range(23)]
@@ -271,6 +283,7 @@ def settle_days(p: dict, now: datetime) -> list[dict]:
                 p["series_id"] = uuid.uuid4().hex
                 if not p["golden"]:
                     p["tree"] = []
+                    p["tree_plan"] = bonsai.generate_tree(MAX_GROWTH).to_dict()
                 b = active_book(p)
                 if b:
                     b["streak"] = 0

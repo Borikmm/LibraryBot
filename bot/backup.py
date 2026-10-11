@@ -5,7 +5,7 @@ import json
 import re
 from datetime import UTC, date, datetime, timedelta
 
-from . import domain as d
+from . import bonsai, domain as d
 
 MAX_BACKUP_BYTES = 5 * 1024 * 1024
 
@@ -40,7 +40,7 @@ def _validate(payload, uid, now):
     if (
         payload["format"] != "LibraryBot"
         or type(payload["version"]) is not int
-        or payload["version"] != 1
+        or payload["version"] not in (1, 2)
     ):
         raise d.RuleError("Версия или формат экспорта не поддерживается.")
     if (
@@ -51,9 +51,42 @@ def _validate(payload, uid, now):
     ):
         raise d.RuleError("Этот экспорт принадлежит другому пользователю Telegram.")
     p = copy.deepcopy(payload["profile"])
-    expected = set(d.new_profile(uid, "", "UTC", now))
+    if payload["version"] == 1:
+        if "tree_plan" in p or any("tree_plan" in book for book in p["books"]):
+            raise ValueError("version one fields")
+        p["tree_plan"] = None
+        for book in p["books"]:
+            book["tree_plan"] = None
+    expected = {
+        "owner_id",
+        "name",
+        "registered_at",
+        "timezone",
+        "onboarded",
+        "show_forest",
+        "show_stats",
+        "reminders",
+        "quotes_enabled",
+        "quote_times",
+        "books",
+        "marks",
+        "protections",
+        "coin_events",
+        "streak",
+        "best",
+        "coins",
+        "series_id",
+        "tree",
+        "tree_plan",
+        "golden",
+        "last_mark_date",
+        "next_mark_at",
+        "closed_through",
+        "free_day",
+        "revision",
+    }
     if set(p) != expected:
-        raise d.RuleError("Набор полей профиля не соответствует версии 1.")
+        raise d.RuleError("Набор полей профиля не соответствует версии экспорта.")
     d.validate_timezone(p["timezone"])
     if not isinstance(p["name"], str) or not 1 <= len(p["name"]) <= 100:
         raise ValueError("name")
@@ -104,6 +137,7 @@ def _validate(payload, uid, now):
             "x",
             "y",
             "seed",
+            "tree_plan",
         }:
             raise ValueError("book fields")
         if not re.fullmatch(r"[0-9a-f]{12}", b["id"]) or b["id"] in books:
@@ -137,6 +171,10 @@ def _validate(payload, uid, now):
             raise ValueError("completion")
         if (b["status"] == "completed") != bool(b["end"]):
             raise ValueError("end status")
+        if b["tree_plan"] is not None:
+            plan = bonsai.Tree.from_dict(b["tree_plan"])
+            if plan.max_parts != d.BOOK_PARTS or plan.seed != b["seed"]:
+                raise ValueError("book tree")
     if sum(b["status"] == "active" for b in p["books"]) > 1:
         raise ValueError("active")
     days = set()
@@ -159,6 +197,14 @@ def _validate(payload, uid, now):
         raise ValueError("best")
     cells = set()
     allowed = set(d.TREE_CELLS)
+    if p["tree_plan"] is not None:
+        plan = bonsai.Tree.from_dict(p["tree_plan"])
+        if plan.max_parts != d.MAX_GROWTH:
+            raise ValueError("main tree size")
+        expected_prefix = [[part.x, part.y, part.emoji] for part in plan.parts[: len(p["tree"])]]
+        if p["tree"] != expected_prefix:
+            raise ValueError("main tree prefix")
+        allowed = {tuple(cell) for cell in expected_prefix}
     if not isinstance(p["tree"], list) or len(p["tree"]) > d.MAX_GROWTH:
         raise ValueError("tree")
     for cell in p["tree"]:

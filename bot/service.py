@@ -75,7 +75,7 @@ class Service:
         p.pop("group_id", None)
         return {
             "format": "LibraryBot",
-            "version": 1,
+            "version": 2,
             "exported_at": d.iso(now),
             "owner_id": uid,
             "profile": p,
@@ -103,6 +103,7 @@ class Service:
             imported["group_id"] = None
             if current["golden"]:
                 imported["golden"], imported["tree"] = True, current["tree"]
+                imported["tree_plan"] = current["tree_plan"]
             if current["next_mark_at"]:
                 imported["next_mark_at"] = max(
                     imported["next_mark_at"] or "", current["next_mark_at"]
